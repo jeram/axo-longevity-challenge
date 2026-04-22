@@ -1,167 +1,153 @@
 # Axo Longevity — Biomarker Intelligence
 
-Upload any lab report PDF and instantly get a clear, AI-powered breakdown of every biomarker — translated to English, classified as **optimal**, **normal**, or **out of range** based on your age and sex.
+Upload any lab report PDF and get an instant breakdown of every biomarker — translated to English, classified as **optimal**, **normal**, or **out of range** based on your age and sex.
+
+Live demo → https://axo-longevity-challenge.vercel.app
 
 ---
 
-## Quick Start
+## Getting started
 
 ```bash
-# 1. Clone the repo
-git clone https://github.com/YOUR_USERNAME/axo-longevity-challenge
+git clone https://github.com/jeram/axo-longevity-challenge
 cd axo-longevity-challenge
-
-# 2. Install dependencies
 npm install
+```
 
-# 3. Add your Groq API key
-echo "GROQ_API_KEY=your_key_here" > .env.local
+Create a `.env.local` file:
 
-# 4. Run the dev server
+```
+GROQ_API_KEY=your_key_here
+```
+
+Get a free key at [console.groq.com](https://console.groq.com) — no credit card needed.
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and upload the sample PDF.
-
-> **Free API key:** Sign up at [console.groq.com](https://console.groq.com) — no credit card required.
+Open [http://localhost:3000](http://localhost:3000) and upload a lab report PDF.
 
 ---
 
-## How It Works
+## How it works
+
+The flow is pretty straightforward. You upload a PDF, the server pulls out the raw text, sends it to an AI model to extract and translate all the biomarkers into structured JSON, and then a classifier decides whether each value is optimal, normal, or out of range based on the patient's age and sex from the report.
 
 ```
-User uploads PDF
-      │
-      ▼
-POST /api/analyze
-      │
-      ├─ pdf-parse      → extract raw text (free, no API)
-      │
-      ├─ Groq API       → structured JSON via Llama 3.3 70B
-      │   • Extract patient info (name, age, sex, dates)
-      │   • Translate Spanish → English biomarker names
-      │   • Standardize units
-      │   • Parse reference ranges
-      │
-      └─ TypeScript classifier
-          • Out of range  → outside lab's reference range
-          • Normal        → within reference range
-          • Optimal       → within evidence-based performance range
-                │
-                ▼
-         Results dashboard
+Upload PDF
+   │
+   ▼
+Extract text (pdf-parse)
+   │
+   ▼
+Groq API — Llama 3.3 70B
+  • Translate to English
+  • Parse values + units
+  • Identify reference ranges
+   │
+   ▼
+TypeScript classifier
+  • Out of range  → outside lab's reference range
+  • Normal        → within range, not optimal
+  • Optimal       → within evidence-based performance range
+   │
+   ▼
+Results dashboard
 ```
 
 ---
 
-## Tech Stack
+## Classification
 
-| Layer | Choice |
+Most lab reports just tell you if something is in or out of range. This goes one step further — it also flags whether a value is truly *optimal* for long-term health and performance, not just "acceptable."
+
+| Status | Meaning |
+|---|---|
+| 🟢 Optimal | Within evidence-based performance range (e.g. LDL <70, HbA1c <5.0%) |
+| 🟡 Normal | Within the lab's reference range, but could be better |
+| 🔴 Out of Range | Outside the lab's printed reference range |
+
+Ranges are adjusted per sex where it matters — hemoglobin, hormones, creatinine, etc.
+
+---
+
+## Tech stack
+
+| | |
 |---|---|
 | Framework | Next.js 14 (App Router) |
 | Language | TypeScript |
 | Styling | Tailwind CSS v4 |
-| AI / NLP | Groq API (Llama 3.3 70B) |
+| AI | Groq API (Llama 3.3 70B) |
 | PDF parsing | pdf-parse |
 | Icons | Lucide React |
 
----
-
-## Classification Logic
-
-Three-tier classification inspired by Axo's longevity-first philosophy:
-
-| Status | Rule |
-|---|---|
-| 🟢 **Optimal** | Within evidence-based performance range (e.g. LDL <70, HbA1c <5.0%) |
-| 🟡 **Normal** | Within the lab's reference range, but not in optimal zone |
-| 🔴 **Out of Range** | Outside the lab's printed reference range |
-
-Optimal ranges are adjusted per sex where clinically relevant (e.g. hemoglobin, hormones, creatinine).
+I'd normally use Claude or GPT-4 for this kind of extraction work — they handle edge cases better. But since this is a demo, Groq's free tier does the job well enough and requires no credit card.
 
 ---
 
-## Production Deployment Plan
-
-### AWS Architecture
-
-```
-                ┌──────────────────────────────────────┐
-                │           CloudFront CDN              │
-                │  (HTTPS, edge caching, global dist.)  │
-                └──────────────┬───────────────────────┘
-                               │
-              ┌────────────────┴─────────────────┐
-              │                                  │
-     ┌────────▼────────┐              ┌──────────▼──────────┐
-     │   S3 Bucket     │              │   API Gateway        │
-     │ (Next.js static │              │ (POST /api/analyze)  │
-     │  export / SSR)  │              └──────────┬──────────┘
-     └─────────────────┘                         │
-                                       ┌─────────▼─────────┐
-                                       │   Lambda Function  │
-                                       │  (pdf-parse +      │
-                                       │   Groq API call +  │
-                                       │   classifier)      │
-                                       └───────────────────┘
-```
-
-| Service | Purpose |
-|---|---|
-| **S3** | Host Next.js static export; receive PDF uploads via presigned URLs |
-| **Lambda** | Run the analyze function serverlessly (512MB memory, 30s timeout) |
-| **API Gateway** | HTTP trigger for Lambda, handles CORS |
-| **CloudFront** | CDN in front of S3 + API Gateway for global low-latency |
-
-### With Supabase (full product)
-
-- **Auth:** Supabase Auth for user sign-up / login
-- **Database:** Postgres to store analysis history per user
-- **Storage:** Supabase Storage for PDF files (GDPR-compliant EU region)
-- **Row Level Security:** Each user only accesses their own results
-
----
-
-## Project Structure
+## Project structure
 
 ```
 src/
 ├── app/
-│   ├── page.tsx                    # Landing / upload page
+│   ├── page.tsx                    # Upload page
 │   ├── results/page.tsx            # Results dashboard
-│   └── api/analyze/route.ts        # PDF processing endpoint
+│   └── api/analyze/route.ts        # Main endpoint
 ├── components/
-│   ├── upload/UploadZone.tsx       # Drag & drop upload
-│   ├── results/
-│   │   ├── PatientCard.tsx         # Patient info header
-│   │   ├── SummaryStats.tsx        # Animated stat cards
-│   │   ├── FilterBar.tsx           # Status filter + search
-│   │   ├── CategorySection.tsx     # Collapsible category group
-│   │   ├── BiomarkerRow.tsx        # Single biomarker row
-│   │   └── RangeBar.tsx            # Visual range indicator
-│   └── ui/
-│       ├── GlassCard.tsx           # Glassmorphism card
-│       └── StatusBadge.tsx         # Colored status pill
-├── lib/
-│   ├── pdf-parser.ts               # pdf-parse wrapper
-│   ├── groq.ts                     # Groq API + prompt
-│   ├── classifier.ts               # Classification logic
-│   └── optimal-ranges.ts           # Evidence-based ranges
-└── types/biomarker.ts              # All TypeScript interfaces
+│   ├── upload/UploadZone.tsx
+│   └── results/
+│       ├── PatientCard.tsx
+│       ├── SummaryStats.tsx
+│       ├── FilterBar.tsx
+│       ├── CategorySection.tsx
+│       ├── BiomarkerRow.tsx
+│       └── RangeBar.tsx
+└── lib/
+    ├── groq.ts                     # AI extraction + prompt
+    ├── classifier.ts               # Classification logic
+    ├── optimal-ranges.ts           # Evidence-based ranges
+    └── pdf-parser.ts               # PDF text extraction
 ```
 
 ---
 
-## Design Decisions
+## Production deployment
 
-**Why Groq instead of OpenAI/Gemini?**
-Groq is free (no credit card), globally available, and the Llama 3.3 70B model handles multilingual medical text extraction reliably. Gemini is blocked in certain regions; OpenAI requires a credit card.
+For a real production setup I'd go with AWS + Supabase:
 
-**Why pdf-parse instead of a vision API?**
-The sample report is text-based (not image-based), so text extraction is instant, free, and doesn't consume AI tokens for OCR. For image-based PDFs, the pipeline could fall back to a vision model.
+```mermaid
+graph TD
+    A[User Browser] -->|HTTPS| B[CloudFront CDN]
+    B --> C[S3 — Next.js App]
+    B --> D[API Gateway]
+    D --> E[Lambda Function]
+    E -->|Extract text| F[pdf-parse]
+    E -->|AI extraction| G[Groq API]
+    E -->|Save results| H[(Supabase Postgres)]
+    A -->|Auth| I[Supabase Auth]
 
-**Why no database?**
-This is a demo. Results are stored in `sessionStorage` for the session. A production system would persist results to Supabase Postgres with user auth.
+    style A fill:#1e293b,color:#94a3b8
+    style B fill:#0f172a,color:#00D4AA
+    style C fill:#0f172a,color:#94a3b8
+    style D fill:#0f172a,color:#00D4AA
+    style E fill:#0f172a,color:#00D4AA
+    style F fill:#1e293b,color:#94a3b8
+    style G fill:#1e293b,color:#94a3b8
+    style H fill:#1e293b,color:#94a3b8
+    style I fill:#1e293b,color:#94a3b8
+```
 
-**Optimal vs Normal — the distinction that matters**
-Standard lab ranges tell you if something is *acceptable*. Optimal ranges reflect what the longevity literature says is *ideal for performance and healthspan* — tighter, evidence-based thresholds aligned with Axo's mission.
+| Service | Why |
+|---|---|
+| **S3 + CloudFront** | Host the Next.js app with global CDN |
+| **API Gateway + Lambda** | Serverless analyze endpoint — scales to zero when idle |
+| **Supabase Auth** | User login so results are tied to an account |
+| **Supabase Postgres** | Store analysis history per user with row-level security |
+
+PDFs would be uploaded directly to S3 via presigned URLs so they never pass through the app server. GDPR-compliant with EU region hosting.
+
+---
+
+For informational purposes only. Not medical advice.
